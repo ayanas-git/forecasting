@@ -1,5 +1,6 @@
 rm(list = ls())
 #Ayana Andrews-Joseph----
+# Avocado.R
 
 # Check wd
 getwd()
@@ -86,9 +87,18 @@ components(dcmp) %>%
 
 # RESIDUALS (wanted to take a look at seasonal method, not sure if necessary here)
 av_ts %>%
-  model(NAIVE(Avg.Price)) %>%
+  model(STL(Avg.Price)) %>%
   gg_tsresiduals()
-# Feb/March popping up again as a potential issue (~10Wk)
+
+av_ts %>%
+  model(ETS(Avg.Price)) %>%
+  gg_tsresiduals()
+
+av_ts %>%
+  model(ARIMA(Avg.Price)) %>%
+  gg_tsresiduals()
+# Potential issue (~every 10Wks), cyclical - not seasonal?!?
+# The tides turn every 10 weeks?
 
 # TRAIN SET
 av_trn <- av_ts %>%
