@@ -114,12 +114,12 @@ av_fit_ETS <- av_train %>%
 av_fit_ETS
 report(av_fit_ETS)
 # Get an ETS(A,N,N) - Simple exponential smoothing with additive errors
-# alpha is almost 1, just about leveled
+# alpha is almost 1, just about completely leveled
 
 
 av_fit_ETSaan <- av_train %>% 
   model(ETSaan = ETS(Avg.Price ~ error("A") + trend ("A") + season("N")))
-av_fit_ETSann
+av_fit_ETSaa
 report(av_fit_ETSann)
 # ETS(A,A,N) Holt’s method with additive errors is plotting
 # While unsuitable for long-term forecasting looks ok for a very short forecast 
@@ -153,14 +153,38 @@ av_ts %>%
   model(ARIMA(Avg.Price)) %>%
   gg_tsresiduals() + 
   labs(title = "Changes in Average US Avocado Prices")
+# Potential issue (~every 10Wks), cyclical - not seasonal?!?
+# The tides turn every 9/10 weeks?
+# One autocorrelation is outside of the 95% limits, Ljung statistic (.864 for h =2)
+# The average price change is ~random amount which is uncorrelated with the previous week.
+# Short forecast only!
 
 av_ts %>% 
   ACF(Avg.Price, lag_max = 10) %>% 
   autoplot() + 
   labs(title = "Average US Avocado Prices")
+# Depreciating
 
-# Potential issue (~every 10Wks), cyclical - not seasonal?!?
-# The tides turn every 9/10 weeks?
+# One more try at a model. ARIMA was good, with potential cyclical activity trying Gaussian method a 
+# type of autoregression (periodic)?
+
+library(GauPro)
+
+
+# (X, y)
+av_gp <- GauPro(av_train$Date, av_train$Avg.Price, parallel = FALSE)
+# Testing if worked, prediction for 1.15
+predict(av_gp,1.15) # The predictor works
+
+plot(av_train$Date, av_train$Avg.Price)
+curve(av_gp$predict(av_train$Date), add = TRUE, col=2)
+
+#####
+library(GPfit)
+
+av_gp <- GP_fit(av_train$Date, av_train$Avg.Price)
+
+plot(av_gp)
 
 
 # Taking a look at a few models together
