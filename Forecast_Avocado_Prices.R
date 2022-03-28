@@ -7,9 +7,12 @@ getwd()
 
 library(fpp3)
 library(gridExtra)
+
 av <- read.csv("C:/Users/Ayana/VCU_Work/Data_IN_OUT/avocado.csv")
 
 # Dataload----
+
+# Quick Diagnostics
 str(av) #DF
 head(av)
 table(av$type)
@@ -17,6 +20,8 @@ table(av$type)
 
 table(av$year)
 # Years 2015 - 2018
+
+# Look at dates and different values for use in date calculations
 maxDate <- ymd(max(av$Date))
 maxTrnDate <- ymd(max(av$Date)) - years(1)
 fcTimeperiod <- (maxDate - ymd(format(maxTrnDate, "%Y-01-01")))/7 #calc weeks removed
@@ -32,26 +37,37 @@ av_ts <- av %>%
   mutate(Date = as.Date(Date, format = "%Y-%m-%d")) %>%
   arrange(Date) %>%
   select(Date, AveragePrice) %>% 
-  rename(Avg.Price = AveragePrice) %>%
   as_tsibble(index = Date)
 av_ts
 
 av_ts %>%
-  autoplot(Avg.Price) +
+  autoplot(AveragePrice) +
+  theme(
+    panel.background = element_rect(fill = "#BFD5E3", colour = "#6D9EC1",
+                                    size = 2, linetype = "solid"),
+    panel.grid.major = element_line(size = 0.5, linetype = 'solid',
+                                    colour = "white"), 
+    panel.grid.minor = element_line(size = 0.25, linetype = 'solid',
+                                    colour = "white")) +
+  geom_line(aes(), lwd = 0.7) +
   labs(title = "Average US Avocado Prices Over Time", 
        y = "Average Price ($)", 
        x = "Date")
-# Seasonality (Y), Multiplicative over time?
+
+# NTS: 
+# Seasonality looks possible. There are Peaks (and a mound in the ~first third of the data) during the third quarter/season of the year. 
+# Multiplicative over time? The increase is bigger each time.
 # Looking at the plot, prices of avocados are highest during US peak growing season ,
-# trailing off into the forth quarter (calendar year). 
+# trailing off into the forth quarter (calendar year).
 # The peak growing season is April through September, corresponding to price increasing,
-# overall, during this time through the end of the third quarter. 
-# Question - What happened during 2015 or was this the beginning of an increase in 
-# popularity and demand of avocados? Also noting, 2018 has started at higher average prices. 
-# Conservatively, I would expect the same shape for 2018 data. Dip in prices in the coldest 
-# months (although in general the average price during that time may be higher than previous 
-# years (popularity increase?), then an increase (growing season), trailing off into Q4, 
+# overall, during this time through the end of the third quarter.
+# Question - What happened during 2015 or was this the beginning of a significant increase in
+# popularity and demand of avocados? Also noting, 2018 has started at higher average prices.
+# Conservatively, I would expect the same shape for 2018 data. Dip in prices in the coldest
+# months (although in general the average price during that time may be higher than previous
+# years (popularity increase?), then an increase (growing season), trailing off into Q4,
 # beginning of US winter.
+        
 
 
 # TRAIN SET selection----
@@ -61,8 +77,11 @@ av_trn
 # Time = 7D (Weekly)
 # Multiple validation check: 169 - 116, rows diff = 53 [PASS] ~52 weeks in a year)
 
-# What if I split the set 80/20? Increase the historical points available for the 
-# training model. The plot of the training set may/may not have 
+# What if I split the set 80/20? Increase the historical points available for the training model? 
+# ### Calculating an actual 80/20 train-test ratio provided more “coverage” in data points.
+# Great for more info about periodicity – whatever may/not be.
+
+
 
 # Set 80/20 of data set
 av_train <-  av_ts %>% 
@@ -78,11 +97,14 @@ max(av_ts$Date) - max(av_train$Date)
 # Visualize
 autoplot(av_train)
 
-a <- gg_season(av_ts)+
+a <- gg_season(av_ts) + 
+  geom_line(aes(), lwd = 0.7) +
   labs(title = "Full Data")
-b <- gg_season(av_trn)+
+b <- gg_season(av_trn) + 
+  geom_line(aes(), lwd = 0.7) +
   labs(title = "Split Data")
-c <- gg_season(av_train)+
+c <- gg_season(av_train) + 
+  geom_line(aes(), lwd = 0.7) +
   labs(title = "Final (80/20) Train Set")
 
 gridExtra::grid.arrange(a, b, c, ncol = 1,  top = "Representation of Data Between Sets")
@@ -92,25 +114,56 @@ gridExtra::grid.arrange(a, b, c, ncol = 1,  top = "Representation of Data Betwee
 # The season runs July through April in Chile and May through August in Peru and Argentina. Maybe a Peru import ~May
 
 
+
 # Training data and Cross-Validation----
 
 # Train the models
 
+# Taking a look at a few models together
+# Just to see the years out and get a visual line we can look at but understanding
+# the forecast will be for a short period, i.e. 2-3 weeks
+
+av_fit <- av_train %>%
+  model( SeasNaive = SNAIVE(AveragePrice ~ lag("year")),
+         STL = decomposition_model(STL(AveragePrice), ETS(season_adjust)), 
+         STL.log = decomposition_model(STL(log(AveragePrice)), ETS(season_adjust)), 
+         ETS = ETS(AveragePrice ~ error("A") + trend ("A") + season("N")), 
+         searchARIMA = ARIMA(AveragePrice, stepwise = FALSE))  %>%
+  forecast(h=104) %>%
+  autoplot(av_ts, level = NULL) + 
+  labs(title = "Average US Avocado Prices", y="$US") +
+  guides(colour=guide_legend(title="Forecast")) 
+
+av_fit
+
+# Not understanding ETS, the data is seasonal. Seasonal selections, no fc output. 
+# (Leaving this for funny code commentary. Apparently I am yelling at R that there is seasonality. )
+
+# NTS: 
+# What is happening?
+# Plotting model after model to try and get something to reflect on the data set that looks more than decent, these are not even that. 
+# 
+# Thoughts post-model training workup:
+# Continue to suspect a pattern, if not seasonal then possibly cyclical.
+# Of the models, two had acceptable “start” points for the forecasted region, the ETS and ARIMA. 
 
 
-
-# MODEL Selection
+# MODEL Selection + Bonus Work Continued
 ##################################################################
+
+# Moving forward, keeping ETS and ARIMA for acceptable comparisons 
+# Even though the other models had some shape (forcing them to account for seasonality) 
+# it is too far off. The final forecaset period, may be very short. 
 
 # Model Trys
 av_fit_ARIMA <- av_train %>% 
-  model(searchARIMA = ARIMA(Avg.Price, stepwise = FALSE))
+  model(searchARIMA = ARIMA(AveragePrice, stepwise = FALSE))
 av_fit_ARIMA
 report(av_fit_ARIMA)
 # Get an ARIMA(0,1,0) - Random Walk
 
 av_fit_ETS <- av_train %>% 
-  model(ETS = ETS(Avg.Price))
+  model(ETS = ETS(AveragePrice))
 av_fit_ETS
 report(av_fit_ETS)
 # Get an ETS(A,N,N) - Simple exponential smoothing with additive errors
@@ -118,18 +171,37 @@ report(av_fit_ETS)
 
 
 av_fit_ETSaan <- av_train %>% 
-  model(ETSaan = ETS(Avg.Price ~ error("A") + trend ("A") + season("N")))
+  model(ETSaan = ETS(AveragePrice ~ error("A") + trend ("A") + season("N")))
 av_fit_ETSaa
 report(av_fit_ETSann)
 # ETS(A,A,N) Holt’s method with additive errors is plotting
 # While unsuitable for long-term forecasting looks ok for a very short forecast 
 # (<= 2-3 weeks, absolutely no more than 4) In my limited opinion
 
-av_fit_STL <- av_train %>% 
-  model(STL = decomposition_model(STL(Avg.Price)))
-av_fit_STL
-report(av_fit_STL)
+# Compare models
+#we can smooth out the data to make it less noisy using a Moving Average (MA)
+#we do that using the slide_dbl function
+av_fit <- av_train %>%
+  model( SeasNaive = SNAIVE(AveragePrice ~ lag("year")),
+         STL = decomposition_model(STL(AveragePrice), ETS(season_adjust)), 
+         STL.log = decomposition_model(STL(log(AveragePrice)), ETS(season_adjust)), 
+         ETS = ETS(AveragePrice ~ error("A") + trend ("A") + season("N")), 
+         searchARIMA = ARIMA(AveragePrice, stepwise = FALSE))  %>%
+  forecast(h=104) %>%
+  autoplot(av_ts, level = NULL) + 
+  labs(title = "Average US Avocado Prices", y="$US") +
+  guides(colour=guide_legend(title="Forecast")) 
 
+av_fit
+
+# Looking at what we have to chose from, whats is best?
+av_fits <- av_train %>%
+  model( SeasNaive = SNAIVE(AveragePrice ~ lag("year")),
+         STL = decomposition_model(STL(AveragePrice), ETS(season_adjust)), 
+         STL.log = decomposition_model(STL(log(AveragePrice)), ETS(season_adjust)), 
+         ETS = ETS(AveragePrice ~ error("A") + trend ("A") + season("N")), 
+         searchARIMA = ARIMA(AveragePrice, stepwise = FALSE)) 
+accuracy(av_fits)
 
 # Ok, so is our data Stationary?
 # A stationary time series is one whose STATISTICAL properties do not depend on the time at 
@@ -142,7 +214,7 @@ report(av_fit_STL)
 # is possible), with constant variance.
 
 av_ts %>% 
-  mutate(diff_price = difference(Avg.Price)) %>% 
+  mutate(diff_price = difference(AveragePrice)) %>% 
   features(diff_price, ljung_box, lag=2)
 
 av_ts %>%
@@ -150,7 +222,7 @@ av_ts %>%
   gg_tsresiduals()
 
 av_ts %>%
-  model(ARIMA(Avg.Price)) %>%
+  model(ARIMA(AveragePrice)) %>%
   gg_tsresiduals() + 
   labs(title = "Changes in Average US Avocado Prices")
 # Potential issue (~every 10Wks), cyclical - not seasonal?!?
@@ -159,11 +231,52 @@ av_ts %>%
 # The average price change is ~random amount which is uncorrelated with the previous week.
 # Short forecast only!
 
+# Stationary or not
+av_ts %>%
+  features(AveragePrice, unitroot_kpss)
+
+
+#need to difference! there doesn't seem to be seasonality, so let's see if a first difference passes
+av_ts%>%
+  features(difference(AveragePrice), unitroot_kpss)
+
+# it does.  We will use a value of d=1 for our models.
 av_ts %>% 
-  ACF(Avg.Price, lag_max = 10) %>% 
+  ACF(AveragePrice, lag_max = 35) %>% 
   autoplot() + 
-  labs(title = "Average US Avocado Prices")
+  labs(title = "Average US Avocado Prices - Depreciating ACF")
 # Depreciating
+
+# let's view the ACF and PACF of the DIFFERENCED data
+av_ts %>%
+  gg_tsdisplay(difference(AveragePrice), plot_type = 'partial') + 
+  labs(title = "US Avocado Average Weekly Prices")
+
+# both ACF and PACF could be described as sinusoidal.
+
+#let's also add in some automatic models 
+av_arima_fits <- av_ts %>%
+  model(arima010 = ARIMA(AveragePrice ~ pdq(0,1,0)),
+        stepwise = ARIMA(AveragePrice),
+        bestARIMA = ARIMA(AveragePrice, stepwise = FALSE)
+  )
+# First two are exactly the same, stepwise = TRUE (default)
+av_arima_fits %>% pivot_longer(names_to = "Model name", values_to = "AveragePrice")
+
+accuracy(av_arima_fits)
+glance(av_arima_fits)
+
+# Use the "bestARIMA" model for a short forecast.
+av_ARIMA_fc <- av_ts %>%
+  model(ARIMA = ARIMA(AveragePrice, stepwise = FALSE))  %>%
+  forecast(h=4) %>%
+  autoplot(av_ts, level = NULL) + 
+  labs(title = "Average US Avocado Prices - Short Forecast ", y="$US") +
+  guides(colour=guide_legend(title="Forecast")) 
+av_ARIMA_fc
+
+#######
+# TIME PERMITTING
 
 # One more try at a model. ARIMA was good, with potential cyclical activity trying Gaussian method a 
 # type of autoregression (periodic)?
@@ -179,6 +292,7 @@ predict(av_gp,1.15) # The predictor works
 plot(av_train$Date, av_train$Avg.Price)
 curve(av_gp$predict(av_train$Date), add = TRUE, col=2)
 
+
 #####
 library(GPfit)
 
@@ -187,33 +301,6 @@ av_gp <- GP_fit(av_train$Date, av_train$Avg.Price)
 plot(av_gp)
 
 
-# Taking a look at a few models together
-# Just to see the years out and get a visual line we can look at but understanding
-# the forecast will be for a short period, i.e. 2-3 weeks
-
-av_fit <- av_train %>%
-  model( SeasNaive = SNAIVE(Avg.Price ~ lag("year")),
-         STL = decomposition_model(STL(Avg.Price), ETS(season_adjust)), 
-         STL.log = decomposition_model(STL(log(Avg.Price)), ETS(season_adjust)), 
-         ETS = ETS(Avg.Price ~ error("A") + trend ("A") + season("N")), 
-         searchARIMA = ARIMA(Avg.Price, stepwise = FALSE))  %>%
-  forecast(h=104) %>%
-  autoplot(av_ts, level = NULL) +
-  labs(title = "Average US Avocado Prices", y="$US") +
-  guides(colour=guide_legend(title="Forecast"))
-# Not understanding ETS, the data is seasonal. Seasonal selections, no fc output.
-av_fit
-
-b <- av_ts %>% filter(year(Date)>= 2016)
-b
-
-
-
-
-
-
-
-av_ts %>% gg_tsdisplay(difference(Avg.Price), plot_type = 'partial')
 
 
 
