@@ -108,7 +108,9 @@ c <- gg_season(av_train) +
   labs(title = "Final (80/20) Train Set")
 
 gridExtra::grid.arrange(a, b, c, ncol = 1,  top = "Representation of Data Between Sets")
-# Q3 (really, sep, oct, nov) increase shown and drop in sales each Feb and May?!?
+# Q3 (really, sep, oct, nov) increase shown and drop in average prices each Feb (Superbowl, nice catch SamW.) 
+# and May?!?
+# Superbowl is plausible in a price drop probably due to an increase in volume. 
 # Jan - March are peek growing seasons, prices lower not a surprise
 # The US also gets a summer supplement from Peru, a winter bump from Chile
 # The season runs July through April in Chile and May through August in Peru and Argentina. Maybe a Peru import ~May
@@ -163,7 +165,7 @@ av_fits_try
 dcmp <- av_ts %>%
   model(STL(AveragePrice))
 components(dcmp)
-# February not surprising from ggseason() visual
+# February not surprising from gg_season() visual and Superbowl possible tie-in.
 
 # Plot all the components
 components(dcmp) %>% 
@@ -173,7 +175,7 @@ components(dcmp) %>%
 
 # Compare models
 
-# Looking at what we have to chose from, whats is best? COmparing using an auto ETS here.
+# Looking at what we have to chose from, whats is best? Comparing using an auto ETS here.
 av_mods_all <- av_train %>%
   model(ARIMA = ARIMA(AveragePrice, stepwise = FALSE), 
         ETS = ETS(AveragePrice), 
@@ -204,9 +206,7 @@ av_mods %>%
 # I could see for just that short period of time, an increase is plausible. Keeping.
 
 # MODEL Selection----
-##################################################################
-
-# Moving forward, keeping ETS(AveragePrice)
+# Moving forward, keeping ETS(AveragePrice) and will compare to ETS(A, A, N)
 
 # Model Information
 av_fit_ARIMA <- av_train %>% 
@@ -226,10 +226,8 @@ av_fit_ETSaan
 report(av_fit_ETSaan)
 # Get an ETS(A,N,N) - Simple exponential smoothing with additive errors
 # alpha is almost 1, just about completely leveled
-
-
 # While unsuitable for long-term forecasting looks consider for a very short forecast 
-# (<= 2-3 weeks, absolutely no more than 4) In my limited opinion
+# (<= 1-2 weeks, absolutely no more than 2) In my limited opinion
 
 
 
@@ -288,3 +286,22 @@ av_ARIMA_fc <- av_ts %>%
   labs(title = "Average US Avocado Prices - Short Forecast ", y="$US")
 av_ARIMA_fc
 
+
+### Rabbit Hole Next Suggestions ----
+# Another look at data – 
+# - i.e., Specific regions instead of TotalUS
+# - look at Price ~ Volume
+# - is there an updated data set we could leverage?
+#   Move onto something else! Another fruit? Vegetable?
+
+# Reshape the data (i.e., monthly) 
+# Another model – 
+# - ARIMA(0, 2, 2)
+# - consider trying a Gaussian process. There may not be seasonality but there still may be some periodicity, i.e., cyclical (every 10 weeks)
+# - Periodic Autoregressive Time Series modeling
+
+
+
+
+
+  
